@@ -218,7 +218,7 @@ export function GTFSMode({ config }: GTFSModeProps) {
 
   // RSS-parsed ZET service alerts (polled by GitHub Actions cron every 30 min).
   // `stops` lets the hook resolve each alert's affectedStops names → GTFS stop ids.
-  const rssAlerts = useRssServiceAlerts(routesById, stops);
+  const { alerts: rssAlerts, pastAlerts } = useRssServiceAlerts(routesById, stops);
   // getMockServiceAlerts returns [] unless VITE_MOCK_ALERTS=true (dev only)
   const serviceAlerts = useMemo(
     () => [...getMockServiceAlerts(routesById, stops), ...rssAlerts, ...gtfsRtAlerts],
@@ -617,6 +617,7 @@ export function GTFSMode({ config }: GTFSModeProps) {
               onRefresh={refetchClosures}
               onRouteClick={(routeId, routeType) => handleSelectRoute(routeId, routeType)}
               onStopHighlight={handleAlertStopHighlight}
+              pastAlerts={pastAlerts}
               refreshCooldownSecondsLeft={closuresRefreshSecondsLeft}
               refreshedAtMs={closuresRefreshedAtMs}
               refreshing={closuresLoading}

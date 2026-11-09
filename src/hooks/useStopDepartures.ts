@@ -27,10 +27,22 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import type { Route, RouteStopsData, Stop, StopTimetable } from '../utils/gtfs';
+import type {
+  ActiveTrip,
+  Route,
+  RouteStopsData,
+  RouteTimetable,
+  Stop,
+  StopTimetable,
+} from '../utils/gtfs';
 
 import { useRealtimeStore } from '../stores/realtimeStore';
-import { fetchRouteStops, fetchStopTimetable } from '../utils/gtfs';
+import {
+  fetchRouteActiveTrips,
+  fetchRouteStops,
+  fetchRouteTimetable,
+  fetchStopTimetable,
+} from '../utils/gtfs';
 import { indexByTripKey, matchRealtime } from '../utils/tripIdMatch';
 import { computeVehicleStopProgress } from '../utils/vehicles';
 import { useInitialData } from './useInitialData';
@@ -51,6 +63,8 @@ export interface StopDeparture {
    * GPS-derived for live rows; delay-adjusted schedule for scheduled-only rows.
    */
   etaSeconds: number;
+  /** GPS arrival clock time, from the same snapshot as etaSeconds. */
+  gpsArrivalMinutes: number;
   /** True when the GPS position has been frozen in place long enough (~4 min) that it can no longer be treated as fresh motion */
   gpsStale: boolean;
   /** True when a GPS position is matched to this trip */
@@ -115,12 +129,46 @@ export function useStopDepartures(
   const { dataDir = 'data', lookaheadMinutes = 60 } = options;
   const [stopTimetable, setStopTimetable] = useState<null | StopTimetable>(null);
   const [routeStopsCache, setRouteStopsCache] = useState<Map<string, RouteStopsData>>(new Map());
+  const [tripStopsCache, setTripStopsCache] = useState<Map<string, RouteTimetable>>(new Map());
+  const [tripMetadata, setTripMetadata] = useState<Map<string, Map<string, ActiveTrip>>>(new Map());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const vehiclePositions = useRealtimeStore((s) => s.vehiclePositions);
   const tripUpdates = useRealtimeStore((s) => s.tripUpdates);
   const { calendar } = useInitialData({ dataDir });
+
+  // Reuse the compressed per-route index only for routes with GPS vehicles on
+  // this board. A changing position must not refetch the same route's metadata.
+  const liveRouteKey = [
+    ...new Set(
+      [...vehiclePositions.values()]
+        .map((pos) => pos.routeId)
+        .filter((id): id is string => !!id && !!stopTimetable?.[id])
+    ),
+  ]
+    .sort()
+    .join(',');
+  useEffect(() => {
+    let cancelled = false;
+    setTripMetadata(new Map());
+    if (!liveRouteKey) return;
+    Promise.all(
+      liveRouteKey.split(',').map(async (id) => {
+        try {
+          const data = await fetchRouteActiveTrips(id, dataDir);
+          return [id, new Map(data.trips.map((trip) => [trip.id, trip]))] as const;
+        } catch {
+          return null;
+        }
+      })
+    ).then((entries) => {
+      if (!cancelled) setTripMetadata(new Map(entries.filter((entry) => entry !== null)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [dataDir, liveRouteKey]);
 
   // Secondary indexes for the service-prefix drift fallback. Built once per feed
   // poll rather than per trip — the departure loop runs over every trip at the
@@ -135,6 +183,7 @@ export function useStopDepartures(
     if (!stopId) {
       setStopTimetable(null);
       setRouteStopsCache(new Map());
+      setTripStopsCache(new Map());
       setError(null);
       return;
     }
@@ -146,6 +195,7 @@ export function useStopDepartures(
     // stop's timetable/topology while the fetch is in flight.
     setStopTimetable(null);
     setRouteStopsCache(new Map());
+    setTripStopsCache(new Map());
 
     fetchStopTimetable(stopId, dataDir)
       .then(async (timetable) => {
@@ -171,6 +221,21 @@ export function useStopDepartures(
         for (const entry of settled) {
           if (entry) map.set(entry[0], entry[1]);
         }
+        // Depot/variant journeys can serve platforms outside both canonical directions.
+        // Only those routes need the larger per-trip topology to detect a GPS pass.
+        const tripTopologies = await Promise.all(
+          routeIds.map(async (routeId) => {
+            const directions = Object.values(map.get(routeId)?.orderedStops ?? {});
+            if (directions.some((ids) => ids.includes(stopId))) return null;
+            try {
+              return [routeId, await fetchRouteTimetable(routeId, dataDir)] as const;
+            } catch {
+              return null;
+            }
+          })
+        );
+        if (fetchingForStopId.current !== stopId) return;
+        setTripStopsCache(new Map(tripTopologies.filter((entry) => entry !== null)));
         // Set timetable and topology together — a render with one but not the other
         // would compute departures against mismatched data.
         setStopTimetable(timetable);
@@ -353,21 +418,29 @@ export function useStopDepartures(
         // GPS-derived stops away / passed-stop projection
         let stopsAway: null | number = null;
         let passedStop = false;
-        if (vehiclePos && targetStopIndex >= 0 && dirStopIds.length > 1) {
-          const stopCoords = dirStopIds
+        const progressStopIds =
+          targetStopIndex >= 0
+            ? dirStopIds
+            : (tripStopsCache.get(routeId)?.[tripId]?.map(([sid]) => sid) ?? []);
+        if (vehiclePos && progressStopIds.length > 1) {
+          // Keep the target index in the same coordinate list used for projection:
+          // missing stop coordinates must not shift the target past the vehicle.
+          const knownStopIds = progressStopIds.filter((sid) => stopsById.has(sid));
+          const progressTargetIndex = knownStopIds.indexOf(stopId);
+          const stopCoords = knownStopIds
             .map((sid) => {
               const s = stopsById.get(sid);
               return s ? { lat: s.lat, lon: s.lon } : null;
             })
             .filter((s): s is { lat: number; lon: number } => s !== null);
 
-          if (stopCoords.length > 1) {
+          if (progressTargetIndex >= 0 && stopCoords.length > 1) {
             const vehicleProgress = computeVehicleStopProgress(
               vehiclePos.latitude,
               vehiclePos.longitude,
               stopCoords
             );
-            const rawStopsAway = targetStopIndex - vehicleProgress;
+            const rawStopsAway = progressTargetIndex - vehicleProgress;
             if (rawStopsAway < 0) {
               // Vehicle projects past this stop. The projection dips slightly negative
               // from GPS noise while a vehicle is boarding, so distance decides: within
@@ -442,6 +515,7 @@ export function useStopDepartures(
           distanceMeters,
           etaFromGpsSeconds,
           etaSeconds,
+          gpsArrivalMinutes: (nowSeconds - midnightSeconds + etaSeconds) / 60,
           gpsStale,
           hasGps,
           lat: vehiclePos?.latitude ?? null,
@@ -454,7 +528,9 @@ export function useStopDepartures(
           routeType: route.type,
           scheduledMinutes,
           stopsAway,
-          tripDestinationName,
+          tripDestinationName: hasGps
+            ? tripMetadata.get(routeId)?.get(tripId)?.headsign.trim() || tripDestinationName
+            : tripDestinationName,
           tripId,
           vehicleId: vehiclePos?.vehicleId ?? null,
         });
@@ -494,6 +570,8 @@ export function useStopDepartures(
     stopId,
     stopTimetable,
     routeStopsCache,
+    tripStopsCache,
+    tripMetadata,
     vehiclePositions,
     tripUpdates,
     vehiclePositionsByKey,

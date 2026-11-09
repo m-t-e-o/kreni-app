@@ -45,6 +45,7 @@ export function DepartureCard({ compact = false, departure, onRouteClick }: Depa
     delaySeconds,
     distanceMeters,
     etaSeconds,
+    gpsArrivalMinutes,
     gpsStale,
     hasGps,
     passedStop,
@@ -67,13 +68,12 @@ export function DepartureCard({ compact = false, departure, onRouteClick }: Depa
       : '#d97706';
   // Expected clock time (delay-adjusted when realtime data exists); wraps after midnight
   const clockTime = formatTime24h(hasDelay ? adjustedMinutes : scheduledMinutes);
-  const clockColor = isLate ? 'text-error' : isEarly ? 'text-success' : 'text-base-content/40';
 
   // ── Right-hand block ──
   let primaryText: string;
   let primaryColor: string;
   let secondary: null | string = null;
-  let secondaryColor = 'text-base-content/40';
+  const secondaryColor = 'text-base-content/40';
 
   if (passedStop) {
     primaryText = t('vehicleCard.passed');
@@ -85,8 +85,9 @@ export function DepartureCard({ compact = false, departure, onRouteClick }: Depa
     const mins = Math.max(1, Math.ceil(etaSeconds / 60));
     primaryText = isAtStop ? t('vehicleCard.atStop') : t('vehicleCard.minutesTilde', { mins });
     primaryColor = 'text-success';
-    secondary = clockTime;
-    secondaryColor = clockColor;
+    // Live countdown and clock must describe the same GPS estimate. The scheduled
+    // clock can differ by many minutes on depot trips or stale trip-level delays.
+    secondary = formatTime24h(gpsArrivalMinutes);
   } else {
     // Scheduled-only: the clock time is the hero
     primaryText = clockTime;

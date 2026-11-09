@@ -25,6 +25,7 @@ interface DisruptionsModalProps {
   onRouteClick?: (routeId: string, routeType: number) => void;
   onStopHighlight?: (stopIds: string[]) => void;
   onTabChange: (tab: DisruptionTab) => void;
+  pastAlerts?: ParsedServiceAlert[];
   refreshCooldownSecondsLeft: null | number;
   refreshedAtMs: null | number;
   refreshing: boolean;
@@ -50,6 +51,7 @@ export function DisruptionsModal({
   onRouteClick,
   onStopHighlight,
   onTabChange,
+  pastAlerts = [],
   refreshCooldownSecondsLeft,
   refreshedAtMs,
   refreshing,
@@ -96,6 +98,7 @@ export function DisruptionsModal({
           onClose={onClose}
           onRouteClick={onRouteClick}
           onStopHighlight={onStopHighlight}
+          pastAlerts={pastAlerts}
           routesById={routesById}
           selectedRouteId={selectedRouteId}
         />

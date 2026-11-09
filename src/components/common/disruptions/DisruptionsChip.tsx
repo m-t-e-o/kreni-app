@@ -12,13 +12,19 @@ import type { DisruptionTab } from './DisruptionsModal';
 interface DisruptionsChipProps {
   alertsCount: number;
   closuresCount: number;
+  hasPastAlerts?: boolean;
   onOpen: (tab: DisruptionTab) => void;
 }
 
-export function DisruptionsChip({ alertsCount, closuresCount, onOpen }: DisruptionsChipProps) {
+export function DisruptionsChip({
+  alertsCount,
+  closuresCount,
+  hasPastAlerts = false,
+  onOpen,
+}: DisruptionsChipProps) {
   const { t } = useTranslation();
 
-  const showAlerts = alertsCount > 0;
+  const showAlerts = alertsCount > 0 || hasPastAlerts;
   const showClosures = closuresCount > 0;
   if (!showAlerts && !showClosures) return null;
 
@@ -26,7 +32,11 @@ export function DisruptionsChip({ alertsCount, closuresCount, onOpen }: Disrupti
     <div className="badge gap-0 p-0 h-auto shadow overflow-hidden border-base-300/60">
       {showAlerts && (
         <button
-          aria-label={t('disruptions.chipAlertsAria', { count: alertsCount })}
+          aria-label={
+            alertsCount > 0
+              ? t('disruptions.chipAlertsAria', { count: alertsCount })
+              : t('disruptions.pastNotices')
+          }
           // Fixed colour. This used to flip to text-error whenever the selected
           // route had an alert, so the same feed made the chip change colour as
           // you tapped around the map.
@@ -35,7 +45,9 @@ export function DisruptionsChip({ alertsCount, closuresCount, onOpen }: Disrupti
           type="button"
         >
           <AlertTriangle className="w-3 h-3" />
-          {t('serviceAlerts.count', { count: alertsCount })}
+          {alertsCount > 0
+            ? t('serviceAlerts.count', { count: alertsCount })
+            : t('disruptions.pastNotices')}
         </button>
       )}
 

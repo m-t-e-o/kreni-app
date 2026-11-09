@@ -20,6 +20,7 @@ interface DisruptionsPanelProps {
   onRefresh: () => void;
   onRouteClick?: (routeId: string, routeType: number) => void;
   onStopHighlight?: (stopIds: string[]) => void;
+  pastAlerts?: ParsedServiceAlert[];
   refreshCooldownSecondsLeft: null | number;
   refreshedAtMs: null | number;
   refreshing: boolean;
@@ -34,6 +35,7 @@ export function DisruptionsPanel({
   onRefresh,
   onRouteClick,
   onStopHighlight,
+  pastAlerts = [],
   refreshCooldownSecondsLeft,
   refreshedAtMs,
   refreshing,
@@ -44,7 +46,7 @@ export function DisruptionsPanel({
   const [open, setOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<DisruptionTab>('alerts');
 
-  if (alerts.length === 0 && closures.length === 0) return null;
+  if (alerts.length === 0 && pastAlerts.length === 0 && closures.length === 0) return null;
 
   const handleOpen = (tab: DisruptionTab) => {
     setActiveTab(tab);
@@ -56,6 +58,7 @@ export function DisruptionsPanel({
       <DisruptionsChip
         alertsCount={alerts.length}
         closuresCount={closures.length}
+        hasPastAlerts={pastAlerts.length > 0}
         onOpen={handleOpen}
       />
 
@@ -70,6 +73,7 @@ export function DisruptionsPanel({
             onRouteClick={onRouteClick}
             onStopHighlight={onStopHighlight}
             onTabChange={setActiveTab}
+            pastAlerts={pastAlerts}
             refreshCooldownSecondsLeft={refreshCooldownSecondsLeft}
             refreshedAtMs={refreshedAtMs}
             refreshing={refreshing}

@@ -38,8 +38,10 @@ import type {
 import type { VehiclePosition } from '../../../utils/vehicles';
 
 import { useGTFSMode } from '../../../contexts/GTFSModeContext';
+import { useStaticTripResolver } from '../../../hooks/useStaticTripResolver';
 import { useStopDepartures } from '../../../hooks/useStopDepartures';
 import { useSettingsStore } from '../../../stores/settingsStore';
+import { exceptionalJourneyEnd } from '../../../utils/journeyDestination';
 import { isNightRoute } from '../../../utils/nightLines';
 import { getRouteSuspension, parseFeedDate } from '../../../utils/routeService';
 import { routeBadgeColor } from '../../../utils/routeStyle';
@@ -113,6 +115,15 @@ export function RouteVehiclePanel({
 }: RouteVehiclePanelProps) {
   const { t } = useTranslation();
   const { dataDir } = useGTFSMode();
+  const tripIds = useMemo(() => Object.keys(routeTimetable ?? {}), [routeTimetable]);
+  const tripResolver = useStaticTripResolver(tripIds, { dataDir });
+  const staticTripId = activeTripId ? tripResolver.resolve(activeTripId) : undefined;
+  const exceptionalEnd = exceptionalJourneyEnd(
+    staticTripId ? routeTimetable?.[staticTripId] : undefined,
+    orderedStops,
+    stopsById,
+    clickedVehicle?.headsign
+  );
   const color = routeBadgeColor(route);
   const RouteIcon = route.type === 3 ? Bus : Train;
   const { favouriteRouteIds, toggleFavouriteRoute } = useSettingsStore();
@@ -328,16 +339,23 @@ export function RouteVehiclePanel({
             )}
 
             {activeTripId ? (
-              <FocusedVehicleCard
-                activeTripId={activeTripId}
-                clickedTripUpdate={clickedTripUpdate}
-                clickedVehicle={clickedVehicle}
-                clickedVehiclePos={clickedVehiclePos}
-                color={color}
-                routeTimetable={routeTimetable}
-                stopsById={stopsById}
-                timetableLoading={timetableLoading}
-              />
+              <>
+                {exceptionalEnd && (
+                  <p className="px-3 py-2 text-xs text-base-content/70">
+                    {t('routeBar.endsAt', { name: exceptionalEnd })}
+                  </p>
+                )}
+                <FocusedVehicleCard
+                  activeTripId={activeTripId}
+                  clickedTripUpdate={clickedTripUpdate}
+                  clickedVehicle={clickedVehicle}
+                  clickedVehiclePos={clickedVehiclePos}
+                  color={color}
+                  routeTimetable={routeTimetable}
+                  stopsById={stopsById}
+                  timetableLoading={timetableLoading}
+                />
+              </>
             ) : (
               <>
                 {vehiclesInDirection.length === 0 && (

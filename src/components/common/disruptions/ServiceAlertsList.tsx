@@ -29,6 +29,7 @@ interface ServiceAlertsListProps {
   onRouteClick?: (routeId: string, routeType: number) => void;
   /** Pan/pulse the map to the alert's affected stops. */
   onStopHighlight?: (stopIds: string[]) => void;
+  pastAlerts?: ParsedServiceAlert[];
   routesById: Map<string, Route>;
   selectedRouteId?: null | string;
 }
@@ -38,6 +39,7 @@ export function ServiceAlertsList({
   onClose,
   onRouteClick,
   onStopHighlight,
+  pastAlerts = [],
   routesById,
   selectedRouteId,
 }: ServiceAlertsListProps) {
@@ -168,6 +170,23 @@ export function ServiceAlertsList({
           </div>
         );
       })}
+      {pastAlerts.length > 0 && (
+        <details className="p-4">
+          <summary className="cursor-pointer text-sm text-base-content/60">
+            {t('disruptions.pastNotices')} ({pastAlerts.length})
+          </summary>
+          <div className="mt-3 opacity-70">
+            <ServiceAlertsList
+              alerts={pastAlerts}
+              onClose={onClose}
+              onRouteClick={onRouteClick}
+              onStopHighlight={onStopHighlight}
+              routesById={routesById}
+              selectedRouteId={selectedRouteId}
+            />
+          </div>
+        </details>
+      )}
     </div>
   );
 }

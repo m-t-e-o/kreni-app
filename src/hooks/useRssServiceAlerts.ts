@@ -5,6 +5,7 @@ import type { ParsedServiceAlert } from '../utils/realtime';
 import type { StopNameIndex } from '../utils/stopNameMatch';
 
 import { GTFS_API_KEY, GTFS_PROXY_URL } from '../config';
+import { isExpiredServiceAlert } from '../utils/serviceAlertExpiry';
 import { buildStopNameIndex, matchStopName } from '../utils/stopNameMatch';
 
 // Fields the parser derives from the LLM are optional on the wire: a partial
@@ -12,6 +13,7 @@ import { buildStopNameIndex, matchStopName } from '../utils/stopNameMatch';
 // values on the way into KV. Only the feed-derived fields are guaranteed.
 interface RssAlert {
   affectedStops?: string[];
+  confirmedEndDate?: null | string;
   endDate: null | string;
   guid: string;
   id: string;
@@ -60,11 +62,9 @@ export function convertToServiceAlerts(
     shortNameIndex.set(route.shortName, id);
   }
 
-  // No date-based filtering: the parser already prunes any item ZET drops from
-  // the RSS feed (parse-service-alerts.mjs), so feed presence *is* ZET's own
-  // curation of "currently relevant". We deliberately do NOT hide alerts whose
-  // parsed endDate is in the past — those dates are best-effort LLM output (the
-  // source text often omits the year) and were silently burying live alerts.
+  // Preserve all feed items here. The hook partitions only source-verified
+  // end dates into history; raw LLM endDate remains informational because
+  // guessed dates used to silently bury valid alerts.
   //
   // Every LLM-derived field is defaulted rather than assumed: a partial model
   // response reaches us with keys missing, and reading through one of them threw
@@ -81,6 +81,7 @@ export function convertToServiceAlerts(
       activeSince: toActivePosix(a.startDate),
       activeUntil: toActivePosix(a.endDate),
       cause: 'OTHER_CAUSE',
+      confirmedEndDate: a.confirmedEndDate,
       // Falls back to the title so a summary-less alert still reads as something.
       description: a.summary ?? a.title,
       effect: (a.type && TYPE_TO_EFFECT[a.type]) ?? 'OTHER_EFFECT',
@@ -99,8 +100,18 @@ export function convertToServiceAlerts(
 export function useRssServiceAlerts(
   routesById: Map<string, Route>,
   stops: Stop[]
-): ParsedServiceAlert[] {
+): { alerts: ParsedServiceAlert[]; pastAlerts: ParsedServiceAlert[] } {
   const [alerts, setAlerts] = useState<ParsedServiceAlert[]>([]);
+  const [nowMs, setNowMs] = useState(Date.now);
+  useEffect(() => {
+    const refresh = () => setNowMs(Date.now());
+    const timer = setInterval(refresh, 30_000);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, []);
 
   // Stop-name → id index for matching alerts' `affectedStops`. Stable after the
   // initial data load; rebuilt only when the stop list itself changes.
@@ -163,7 +174,13 @@ export function useRssServiceAlerts(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routesById.size, stopIndex]);
 
-  return alerts;
+  return useMemo(
+    () => ({
+      alerts: alerts.filter((a) => !isExpiredServiceAlert(a, nowMs)),
+      pastAlerts: alerts.filter((a) => isExpiredServiceAlert(a, nowMs)),
+    }),
+    [alerts, nowMs]
+  );
 }
 
 function toActivePosix(dateStr: null | string): null | number {

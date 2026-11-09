@@ -81,6 +81,8 @@ export interface ParsedServiceAlert {
   activeUntil: null | number;
   /** Alert cause (e.g. 'CONSTRUCTION', 'STRIKE') */
   cause: string;
+  /** Date verified against original RSS text; only this may expire an RSS notice. */
+  confirmedEndDate?: null | string;
   /** Long description text (Croatian preferred) */
   description: string;
   /** Alert effect (e.g. 'DETOUR', 'NO_SERVICE') */
