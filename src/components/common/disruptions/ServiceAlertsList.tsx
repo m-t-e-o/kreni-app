@@ -46,12 +46,11 @@ export function ServiceAlertsList({
   const { t } = useTranslation();
 
   // Relevant alerts first when a route is selected
-  const sorted = selectedRouteId
-    ? [
-        ...alerts.filter((a) => a.routeIds.includes(selectedRouteId)),
-        ...alerts.filter((a) => !a.routeIds.includes(selectedRouteId)),
-      ]
-    : alerts;
+  const sorted = [...alerts].sort((a, b) => {
+    const relevant = (alert: ParsedServiceAlert) =>
+      selectedRouteId && alert.routeIds.includes(selectedRouteId) ? 1 : 0;
+    return relevant(b) - relevant(a) || Number(!!a.dateNeedsReview) - Number(!!b.dateNeedsReview);
+  });
 
   return (
     <div className="flex-1 overflow-y-auto overscroll-contain divide-y divide-base-300">
@@ -100,6 +99,9 @@ export function ServiceAlertsList({
 
             {/* Date range */}
             <DateRange since={alert.activeSince} until={alert.activeUntil} />
+            {alert.dateNeedsReview && (
+              <p className="mt-1 text-xs text-base-content/60">{t('disruptions.dateReview')}</p>
+            )}
 
             {/* Affected routes + stops, collapsed by default. Every badge here
                 carries a saturated colour, so a card with several routes read as

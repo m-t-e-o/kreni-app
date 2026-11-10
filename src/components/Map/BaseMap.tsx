@@ -141,6 +141,9 @@ export function BaseMap({
       */}
       <TileLayer
         attribution={tileConfig.attribution}
+        className={
+          providerId === 'dark-matter' && !cyclosmBasemap ? 'readable-dark-basemap' : undefined
+        }
         crossOrigin="anonymous"
         keepBuffer={3}
         key={tileLayerKey}

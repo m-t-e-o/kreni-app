@@ -1,9 +1,9 @@
 /**
- * Full-screen stop modal — tabbed view with "Vozila" (live GPS) and "Red vožnje" (timetable).
+ * Full-screen stop modal — unified live GPS and scheduled departures.
  * Opened from the map popup expand button.
  */
 
-import { ArrowRight, Clock, Info, Navigation2, Star, X } from 'lucide-react';
+import { ArrowRight, Clock, Navigation2, Star, X } from 'lucide-react';
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -100,7 +100,8 @@ export const StopModal = memo(function StopModal({
     ? departures.filter((d) => journeyFilter.routeIds.includes(d.routeId))
     : departures;
   const shownLiveCount = journeyFilter
-    ? shownDepartures.filter((d) => d.hasGps && !d.passedStop).length
+    ? shownDepartures.filter((d) => d.hasGps && !d.passedStop && d.serviceState === 'approaching')
+        .length
     : liveCount;
 
   // Sibling platforms — stops at the same parent station, or (fallback) same-named stops
@@ -387,6 +388,7 @@ export const StopModal = memo(function StopModal({
             <ServiceAlertBanner
               alerts={stopAlerts}
               className="mx-4 mt-4 mb-3"
+              compact
               routesById={routesById}
             />
           )}
@@ -411,30 +413,24 @@ export const StopModal = memo(function StopModal({
               </button>
             </div>
           )}
-          {/* GPS tip banner */}
+          {/* Keep arrivals visible; explanation is available on demand. */}
           {hasRealtime && shownLiveCount > 0 && !dismissedGpsTip && (
-            <div className="mx-4 mt-4 mb-3 p-4 rounded-xl bg-info/10 border border-info/30 flex gap-3 items-start">
-              <Info className="w-5 h-5 text-info shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-base-content/90 mb-1">
-                  {t('stopView.gpsTipTitle')}
-                </p>
-                <p className="text-sm text-base-content/70 leading-snug mb-1.5">
-                  {t('stopView.gpsTipBodyModal')}
-                </p>
-                <p className="text-sm text-base-content/50 leading-snug">
-                  {t('stopView.gpsTipFootnoteModal')}
-                </p>
-              </div>
+            <details className="mx-4 my-2 rounded-lg border border-info/30 bg-info/5 p-2">
+              <summary className="cursor-pointer text-xs text-base-content/70">
+                {t('stopView.gpsTipTitle')}
+              </summary>
+              <p className="mt-2 text-xs text-base-content/70">{t('stopView.gpsTipBodyModal')}</p>
+              <p className="mt-2 text-xs text-base-content/60">
+                {t('stopView.gpsTipFootnoteModal')}
+              </p>
               <button
-                className="btn btn-ghost btn-circle btn-sm shrink-0"
+                className="btn btn-ghost btn-xs mt-2"
                 onClick={() => setDismissedGpsTip(true)}
-                title={t('stopView.gpsTipDismiss')}
                 type="button"
               >
-                <X className="w-4 h-4" />
+                {t('stopView.gpsTipDismiss')}
               </button>
-            </div>
+            </details>
           )}
           {contentLoading ? (
             <StopModalBodySkeleton label={t('stopView.loadingTimetable')} />

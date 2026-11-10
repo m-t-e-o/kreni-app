@@ -245,9 +245,8 @@ function makeStopIcon(
   const safeLabel = label
     ? String(label).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     : '';
-  // White ring on light maps, black ring on dark maps (paired with the deep
-  // "ink" dark-mode fill colors so stops read as dark chips, not glowing pins).
-  const stroke = isDark ? '#000000' : 'white';
+  // A pale outline keeps stops distinct from both streets and building fills.
+  const stroke = isDark ? '#cbd5e1' : 'white';
 
   if (terminus) {
     // Ring: the outer disc in the stop colour with a punched-out centre, the
@@ -425,12 +424,12 @@ function stopFillColor(
   if (isHighlighted && !isSelected) return '#2337ff';
   switch (stop.routeType) {
     case 0:
-      return isDark ? '#1e3a8a' : '#2563eb'; // tram-only  → blue
+      return isDark ? '#60a5fa' : '#2563eb'; // tram-only  → blue
     case 2:
-      return isDark ? '#7f1d1d' : '#dc2626'; // rail       → red
+      return isDark ? '#f87171' : '#dc2626'; // rail       → red
     case 3:
-      return isDark ? '#78350f' : '#d97706'; // bus-only   → amber
+      return isDark ? '#fbbf24' : '#d97706'; // bus-only   → amber
     default:
-      return isDark ? '#0f172a' : '#475569'; // fallback    → slate
+      return isDark ? '#94a3b8' : '#475569'; // fallback    → slate
   }
 }

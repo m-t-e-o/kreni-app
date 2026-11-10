@@ -6,6 +6,11 @@
 /*@custom-variant dark (&:where(.dark, .dark *));*/
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
+/* Filter dark raster tiles only; preserve controls and other map layers. */
+.readable-dark-basemap {
+  filter: brightness(1.45) contrast(0.95);
+}
+
 @theme {
   --color-dark: #2b2d42;
   --color-medium: #8d99ae;

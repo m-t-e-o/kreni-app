@@ -5,7 +5,7 @@ import type { ParsedServiceAlert } from '../utils/realtime';
 import type { StopNameIndex } from '../utils/stopNameMatch';
 
 import { GTFS_API_KEY, GTFS_PROXY_URL } from '../config';
-import { isExpiredServiceAlert } from '../utils/serviceAlertExpiry';
+import { hasUnverifiedPastDate, isExpiredServiceAlert } from '../utils/serviceAlertExpiry';
 import { buildStopNameIndex, matchStopName } from '../utils/stopNameMatch';
 
 // Fields the parser derives from the LLM are optional on the wire: a partial
@@ -176,7 +176,9 @@ export function useRssServiceAlerts(
 
   return useMemo(
     () => ({
-      alerts: alerts.filter((a) => !isExpiredServiceAlert(a, nowMs)),
+      alerts: alerts
+        .filter((a) => !isExpiredServiceAlert(a, nowMs))
+        .map((a) => ({ ...a, dateNeedsReview: hasUnverifiedPastDate(a, nowMs) })),
       pastAlerts: alerts.filter((a) => isExpiredServiceAlert(a, nowMs)),
     }),
     [alerts, nowMs]

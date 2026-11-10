@@ -7,6 +7,18 @@ const zagrebDate = new Intl.DateTimeFormat('en-CA', {
   year: 'numeric',
 });
 
+/** Review cue only: an unverified parsed date must never hide a source notice. */
+export function hasUnverifiedPastDate(alert: ParsedServiceAlert, nowMs: number): boolean {
+  if (alert.confirmedEndDate || !alert.activeUntil || !Number.isFinite(alert.activeUntil))
+    return false;
+  const end = new Date(alert.activeUntil * 1000);
+  if (!Number.isFinite(end.getTime())) return false;
+  return isExpiredServiceAlert(
+    { ...alert, confirmedEndDate: end.toISOString().slice(0, 10) },
+    nowMs
+  );
+}
+
 /** A source-verified date remains valid for the entire Zagreb calendar day. */
 export function isExpiredServiceAlert(alert: ParsedServiceAlert, nowMs: number): boolean {
   const end = alert.confirmedEndDate;

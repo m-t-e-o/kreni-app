@@ -180,6 +180,11 @@ function CompactAlertRow({ alert, isOpen, onToggle, showIcon }: CompactAlertRowP
       {showIcon && <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />}
       <span className="flex-1 min-w-0 text-xs font-semibold leading-snug text-base-content/90">
         {title}
+        {alert.dateNeedsReview && (
+          <span className="block mt-1 font-normal text-base-content/60">
+            {t('disruptions.dateReview')}
+          </span>
+        )}
       </span>
       {alert.activeUntil && (
         <span className="shrink-0 text-[11px] text-base-content/60">

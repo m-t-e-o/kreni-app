@@ -13,6 +13,7 @@ const fixtures = vi.hoisted(() => ({
   fetchRouteStops: vi.fn(),
   fetchRouteTimetable: vi.fn(),
   fetchStopTimetable: vi.fn(),
+  lastUpdate: null as null | number,
   positions: new Map(),
 }));
 vi.mock('../utils/gtfs', async (original) => ({
@@ -24,7 +25,11 @@ vi.mock('../utils/gtfs', async (original) => ({
 }));
 vi.mock('../stores/realtimeStore', () => ({
   useRealtimeStore: (select: (state: object) => unknown) =>
-    select({ tripUpdates: new Map(), vehiclePositions: fixtures.positions }),
+    select({
+      lastUpdate: fixtures.lastUpdate,
+      tripUpdates: new Map(),
+      vehiclePositions: fixtures.positions,
+    }),
 }));
 vi.mock('./useInitialData', () => ({ useInitialData: () => ({ calendar: {} }) }));
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
@@ -46,7 +51,14 @@ async function board(
   lon: number,
   canonical: boolean,
   missingCoordinate = false,
-  headsign?: string
+  headsign?: string,
+  service: {
+    feedAgeSeconds?: number;
+    scheduledMinutes?: number;
+    speed?: number;
+    start?: number;
+    stationarySeconds?: number;
+  } = {}
 ) {
   // Unique trip/stop keys isolate the intentional module-level passed-trip memory.
   const target = `target-${testId++}`;
@@ -67,10 +79,25 @@ async function board(
     ])
   );
   fixtures.positions = new Map([
-    [trip, { latitude: 45, longitude: lon, routeId: headsign ? '5' : undefined, speed: 5 }],
+    [
+      trip,
+      {
+        latitude: 45,
+        longitude: lon,
+        routeId: headsign ? '5' : undefined,
+        speed: service.speed ?? 5,
+        stationarySeconds: service.stationarySeconds,
+      },
+    ],
   ]);
-  fixtures.fetchRouteActiveTrips.mockResolvedValue({ trips: [{ headsign, id: trip }] });
-  fixtures.fetchStopTimetable.mockResolvedValue({ '5': { [trip]: { sequence: 2, time: 51 } } });
+  fixtures.lastUpdate =
+    service.feedAgeSeconds === undefined ? null : now - service.feedAgeSeconds * 1000;
+  fixtures.fetchRouteActiveTrips.mockResolvedValue({
+    trips: [{ direction: 0, headsign, id: trip, start: service.start }],
+  });
+  fixtures.fetchStopTimetable.mockResolvedValue({
+    '5': { [trip]: { sequence: 2, time: service.scheduledMinutes ?? 51 } },
+  });
   fixtures.fetchRouteStops.mockResolvedValue({
     orderedStops: {
       '0': canonical ? [...(missingCoordinate ? ['missing'] : []), ...ids] : ['a', 'c'],
@@ -93,6 +120,33 @@ async function board(
 }
 
 describe('stop board GPS regression cases', () => {
+  it('excludes a parked future journey outside the stop lookahead window', async () => {
+    expect(
+      await board(15.0001, true, false, 'Dubrava', { scheduledMinutes: 258, speed: 0, start: 250 })
+    ).toEqual([]);
+    expect(result.liveCount).toBe(0);
+  });
+
+  it('does not let future timetable data hide a moving early vehicle', async () => {
+    const [dep] = await board(15.0001, true, false, 'Dubrava', {
+      scheduledMinutes: 258,
+      speed: 8,
+      start: 250,
+    });
+    expect(dep.serviceState).toBe('approaching');
+    expect(result.liveCount).toBe(1);
+  });
+
+  it('keeps uncertain positions visible without green countdowns or live counts', async () => {
+    const [dep] = await board(15.008, true, false, 'Dubrava', { stationarySeconds: 600 });
+    expect(dep.serviceState).toBe('stationary');
+    expect(result.liveCount).toBe(0);
+    const html = renderToStaticMarkup(<DepartureCard departure={dep} />);
+    expect(html).toContain('vehicleCard.arrivalUncertain');
+    expect(html).not.toContain('vehicleCard.minutesTilde');
+    const [stale] = await board(15.008, true, false, 'Dubrava', { feedAgeSeconds: 120 });
+    expect(stale.serviceState).toBe('stale');
+  });
   it('uses the live trip headsign without changing canonical route topology', async () => {
     const [departure] = await board(15.008, true, false, 'Spr. Trešnj.');
     expect(departure.tripDestinationName).toBe('Spr. Trešnj.');

@@ -25,6 +25,17 @@ export function VehicleStopTimeline({
   const { t } = useTranslation();
   const { delayInfo, distanceMeters, primaryStopTime, stopDetail, stopLabel, upcomingStops } =
     preview;
+  const state = preview.serviceState;
+  const uncertain = state && state !== 'approaching';
+
+  if (!stopDetail && uncertain)
+    return (
+      <p className="text-xs text-base-content/70" role="status">
+        {t(
+          state === 'pending' ? 'vehicleCard.departureUnconfirmed' : 'vehicleCard.arrivalUncertain'
+        )}
+      </p>
+    );
 
   if (!stopDetail) {
     return (
@@ -48,6 +59,17 @@ export function VehicleStopTimeline({
 
   return (
     <div className="relative mt-1">
+      {uncertain && (
+        <p className="mb-3 text-xs text-base-content/70" role="status">
+          {t(
+            state === 'pending'
+              ? 'vehicleCard.departureUnconfirmed'
+              : state === 'stale'
+                ? 'vehicleCard.feedStale'
+                : 'vehicleCard.positionUnchanged'
+          )}
+        </p>
+      )}
       {hasUpcoming && (
         <div className="absolute left-[7px] top-[10px] bottom-1 w-[2px] bg-base-content/20 rounded-full" />
       )}
@@ -74,7 +96,9 @@ export function VehicleStopTimeline({
 
           {(delayInfo || distanceMeters !== null) && (
             <div className="flex items-center gap-2 mt-2 px-2.5 py-1.5 w-fit rounded-md bg-base-200/70 border border-base-300/60 shadow-sm">
-              <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse shrink-0" />
+              <div
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${uncertain ? 'bg-base-content/40' : 'bg-success animate-pulse'}`}
+              />
               <div className="flex flex-wrap items-center gap-x-2 text-xs">
                 {delayInfo && (
                   <span

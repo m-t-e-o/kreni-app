@@ -51,13 +51,14 @@ export function DepartureCard({ compact = false, departure, onRouteClick }: Depa
     passedStop,
     realtimeSource,
     scheduledMinutes,
+    serviceState,
   } = departure;
 
   const hasDelay = realtimeSource !== null && delaySeconds !== null;
   const delaySec = delaySeconds ?? 0;
   const isLate = hasDelay && delaySec > 90;
   const isEarly = hasDelay && delaySec < -90;
-  const isLive = hasGps && !passedStop;
+  const isLive = hasGps && !passedStop && (!serviceState || serviceState === 'approaching');
   const isAtStop = isLive && distanceMeters !== null && distanceMeters < 15;
 
   const isNight = isNightRoute({ shortName: departure.routeShortName });
@@ -79,6 +80,16 @@ export function DepartureCard({ compact = false, departure, onRouteClick }: Depa
     primaryText = t('vehicleCard.passed');
     primaryColor = 'text-base-content/40';
     secondary = clockTime;
+  } else if (serviceState === 'stale' || serviceState === 'stationary') {
+    primaryText = t('vehicleCard.arrivalUncertain');
+    primaryColor = 'text-base-content/60';
+    secondary = t(
+      serviceState === 'stale' ? 'vehicleCard.feedStale' : 'vehicleCard.positionUnchanged'
+    );
+  } else if (serviceState === 'pending') {
+    primaryText = clockTime;
+    primaryColor = 'text-base-content/70';
+    secondary = t('vehicleCard.departureUnconfirmed');
   } else if (isLive) {
     // Ceil, not round: the straight-line ETA already errs early and red lights push
     // reality later — under-promising trains users to distrust the green numbers.

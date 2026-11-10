@@ -268,7 +268,12 @@ export function StopInfoBar({
 
         {/* Service-alert banner (disruptions affecting this stop) */}
         {stopAlerts && stopAlerts.length > 0 && (
-          <ServiceAlertBanner alerts={stopAlerts} className="mb-2" routesById={routesById} />
+          <ServiceAlertBanner
+            alerts={stopAlerts}
+            className="mb-2"
+            compact
+            routesById={routesById}
+          />
         )}
 
         {/* Planned-trip filter banner */}

@@ -45,6 +45,7 @@ import {
 } from '../utils/gtfs';
 import { indexByTripKey, matchRealtime } from '../utils/tripIdMatch';
 import { computeVehicleStopProgress } from '../utils/vehicles';
+import { vehicleServiceState, type VehicleServiceState } from '../utils/vehicleServiceState';
 import { useInitialData } from './useInitialData';
 
 export interface StopDeparture {
@@ -81,6 +82,7 @@ export interface StopDeparture {
   routeType: number; // 0 = Tram, 3 = Bus
   /** Scheduled minutes from midnight (may exceed 1440 for after-midnight trips) */
   scheduledMinutes: number;
+  serviceState?: VehicleServiceState;
   /** Stops the vehicle must still serve before this one (0 = approaching this stop directly); null = GPS not available */
   stopsAway: null | number;
   /** Trip terminus for this direction (last stop name), shown instead of route long name */
@@ -136,6 +138,7 @@ export function useStopDepartures(
 
   const vehiclePositions = useRealtimeStore((s) => s.vehiclePositions);
   const tripUpdates = useRealtimeStore((s) => s.tripUpdates);
+  const lastFeedUpdate = useRealtimeStore((s) => s.lastUpdate);
   const { calendar } = useInitialData({ dataDir });
 
   // Reuse the compressed per-route index only for routes with GPS vehicles on
@@ -454,6 +457,44 @@ export function useStopDepartures(
           }
         }
 
+        const metadata = tripMetadata.get(routeId)?.get(tripId);
+        const originIds = vehiclePos
+          ? (tripStopsCache.get(routeId)?.[tripId]?.map(([sid]) => sid) ??
+            routeStopsData?.orderedStops?.[String(metadata?.direction)] ??
+            [])
+          : [];
+        const origin = stopsById.get(originIds[0]);
+        const originCoords = originIds
+          .map((sid) => stopsById.get(sid))
+          .filter((s): s is Stop => !!s);
+        const serviceState = vehiclePos
+          ? vehicleServiceState({
+              feedAgeSeconds: lastFeedUpdate == null ? undefined : (nowMs - lastFeedUpdate) / 1000,
+              originDistance: origin
+                ? haversineMeters(vehiclePos.latitude, vehiclePos.longitude, origin.lat, origin.lon)
+                : undefined,
+              originProgress:
+                originCoords.length > 1
+                  ? computeVehicleStopProgress(
+                      vehiclePos.latitude,
+                      vehiclePos.longitude,
+                      originCoords
+                    )
+                  : undefined,
+              speed: vehiclePos.speed,
+              startInSeconds: metadata
+                ? serviceMidnightSeconds + metadata.start * 60 - nowSeconds
+                : undefined,
+              stationarySeconds: vehiclePos.stationarySeconds,
+            })
+          : undefined;
+        if (serviceState === 'pending') {
+          // An assigned future trip has not served this stop: don't remember a
+          // GPS pass or let the GPS override the timetable lookahead window.
+          passedStop = false;
+          if (scheduledAbsoluteSeconds > windowEnd) continue;
+        }
+
         // Remember GPS-confirmed passes (before the distance filter below drops the row)
         // so this trip's scheduled entry stays suppressed once its GPS disappears.
         if (passedStop) {
@@ -503,7 +544,10 @@ export function useStopDepartures(
         // which used to pin a green "Sada" on the board indefinitely. Scheduled-only rows
         // fall back to the delay-adjusted schedule. It also can never go negative for live
         // rows, so "Sada" now implies the vehicle is physically at the stop.
-        const etaSeconds = etaFromGpsSeconds ?? scheduleArrivingInSeconds;
+        const etaSeconds =
+          serviceState === 'pending'
+            ? scheduleArrivingInSeconds
+            : (etaFromGpsSeconds ?? scheduleArrivingInSeconds);
 
         const gpsStale =
           hasGps && (vehiclePos.stationarySeconds ?? 0) > GPS_STALE_STATIONARY_SECONDS;
@@ -527,6 +571,7 @@ export function useStopDepartures(
           routeShortName: route.shortName,
           routeType: route.type,
           scheduledMinutes,
+          serviceState,
           stopsAway,
           tripDestinationName: hasGps
             ? tripMetadata.get(routeId)?.get(tripId)?.headsign.trim() || tripDestinationName
@@ -558,6 +603,9 @@ export function useStopDepartures(
     // Ties break live-before-scheduled, then by tripId so the order stays deterministic.
     const etaBucket = (d: StopDeparture) => Math.round(d.etaSeconds / 30);
     upcoming.sort((a, b) => {
+      const uncertain = (d: StopDeparture) =>
+        d.serviceState === 'stationary' || d.serviceState === 'stale';
+      if (uncertain(a) !== uncertain(b)) return uncertain(a) ? 1 : -1;
       const bucketDiff = etaBucket(a) - etaBucket(b);
       if (bucketDiff !== 0) return bucketDiff;
       if (a.hasGps !== b.hasGps) return a.hasGps ? -1 : 1;
@@ -574,6 +622,7 @@ export function useStopDepartures(
     tripMetadata,
     vehiclePositions,
     tripUpdates,
+    lastFeedUpdate,
     vehiclePositionsByKey,
     tripUpdatesByKey,
     nowMs,
@@ -583,7 +632,9 @@ export function useStopDepartures(
     lookaheadMinutes,
   ]);
 
-  const liveCount = departures.filter((d) => d.hasGps && !d.passedStop).length;
+  const liveCount = departures.filter(
+    (d) => d.hasGps && !d.passedStop && d.serviceState === 'approaching'
+  ).length;
 
   return {
     departures,

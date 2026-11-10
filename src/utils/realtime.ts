@@ -83,6 +83,8 @@ export interface ParsedServiceAlert {
   cause: string;
   /** Date verified against original RSS text; only this may expire an RSS notice. */
   confirmedEndDate?: null | string;
+  /** Informational cue only; does not suppress an unverified notice. */
+  dateNeedsReview?: boolean;
   /** Long description text (Croatian preferred) */
   description: string;
   /** Alert effect (e.g. 'DETOUR', 'NO_SERVICE') */

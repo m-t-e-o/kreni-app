@@ -3,12 +3,14 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { Route, Stop } from '../../../utils/gtfs';
+import type { TransitJourneyTime } from '../../../utils/transitJourneyTime';
 import type { AllVehiclePosition } from '../../../utils/vehicles';
 
 import { useGTFSMode } from '../../../contexts/GTFSModeContext';
 import { useCurrentTime } from '../../../hooks/useCurrentTime';
 import { useJourneyDepartures } from '../../../hooks/useJourneyDepartures';
 import { useRouteTripDirections } from '../../../hooks/useRouteTripDirections';
+import { useTransitJourneyTimes } from '../../../hooks/useTransitJourneyTimes';
 import { fetchRouteStops } from '../../../utils/gtfs';
 import { isNightRoute, isNightTime } from '../../../utils/nightLines';
 import { RouteBadge } from '../RouteBadge';
@@ -39,6 +41,8 @@ interface DirectionResultRowProps {
   journeyRouteIds: string[];
   onSelectJourneyStop: (childStopId: string, filter: JourneyStopFilter) => void;
   stopsById: Map<string, Stop>;
+  timing?: null | TransitJourneyTime;
+  timingLoading?: boolean;
   toName: string;
   vehicles: AllVehiclePosition[];
 }
@@ -108,6 +112,18 @@ export function DirectionsContent({
     routeIds,
     routesById,
     dataDir
+  );
+  const { loading: timesLoading, times } = useTransitJourneyTimes(
+    hasRealtime ? routeIds : [],
+    hasRealtime ? (dirFromStop?.id ?? null) : null,
+    hasRealtime ? (dirToStop?.id ?? null) : null,
+    stopsById,
+    dataDir
+  );
+  const timedResults = [...dirResults].sort(
+    (a, b) =>
+      (times.get(a.route.id)?.departureMs ?? Infinity) -
+      (times.get(b.route.id)?.departureMs ?? Infinity)
   );
 
   if (dirFromStop && dirToStop && showDepartureBoard) {
@@ -187,7 +203,7 @@ export function DirectionsContent({
         )}
         {!dirLoading && dirResults.length > 0 && (
           <div className="divide-y divide-base-300 border border-base-300 rounded-xl overflow-hidden">
-            {dirResults.map((item) => (
+            {timedResults.map((item) => (
               <DirectionResultRow
                 dataDir={dataDir}
                 dimNight={dimNightLines && isNightRoute(item.route)}
@@ -197,6 +213,8 @@ export function DirectionsContent({
                 key={`${item.route.id}-${item.directionKey}`}
                 onSelectJourneyStop={onSelectJourneyStop}
                 stopsById={stopsById}
+                timing={times.get(item.route.id)}
+                timingLoading={timesLoading}
                 toName={dirToStop?.name ?? ''}
                 vehicles={vehicles}
               />
@@ -232,6 +250,8 @@ function DirectionResultRow({
   journeyRouteIds,
   onSelectJourneyStop,
   stopsById,
+  timing,
+  timingLoading,
   toName,
   vehicles,
 }: DirectionResultRowProps) {
@@ -291,6 +311,26 @@ function DirectionResultRow({
                     direction: item.directionFilter,
                   })}
             </div>
+            <p aria-live="polite" className="mt-1 text-xs text-base-content/75">
+              {timingLoading
+                ? t('search.loading')
+                : timing
+                  ? t('search.scheduledJourney', {
+                      arrival: new Date(timing.arrivalMs).toLocaleString([], {
+                        hour: '2-digit',
+                        hour12: false,
+                        minute: '2-digit',
+                        weekday: 'short',
+                      }),
+                      departure: new Date(timing.departureMs).toLocaleString([], {
+                        hour: '2-digit',
+                        hour12: false,
+                        minute: '2-digit',
+                        weekday: 'short',
+                      }),
+                    })
+                  : t('search.scheduleUnavailable')}
+            </p>
           </div>
           <ChevronRight className="w-4 h-4 text-base-content/30 shrink-0" />
         </div>
