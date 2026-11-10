@@ -255,7 +255,7 @@ function DirectionResultRow({
   toName,
   vehicles,
 }: DirectionResultRowProps) {
-  const { t } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   const candidateVehicles = useMemo(
     () => vehicles.filter((v) => v.routeId === item.route.id),
@@ -316,18 +316,24 @@ function DirectionResultRow({
                 ? t('search.loading')
                 : timing
                   ? t('search.scheduledJourney', {
-                      arrival: new Date(timing.arrivalMs).toLocaleString([], {
-                        hour: '2-digit',
-                        hour12: false,
-                        minute: '2-digit',
-                        weekday: 'short',
-                      }),
-                      departure: new Date(timing.departureMs).toLocaleString([], {
-                        hour: '2-digit',
-                        hour12: false,
-                        minute: '2-digit',
-                        weekday: 'short',
-                      }),
+                      arrival: new Date(timing.arrivalMs).toLocaleString(
+                        i18n.resolvedLanguage || i18n.language,
+                        {
+                          hour: '2-digit',
+                          hour12: false,
+                          minute: '2-digit',
+                          weekday: 'short',
+                        }
+                      ),
+                      departure: new Date(timing.departureMs).toLocaleString(
+                        i18n.resolvedLanguage || i18n.language,
+                        {
+                          hour: '2-digit',
+                          hour12: false,
+                          minute: '2-digit',
+                          weekday: 'short',
+                        }
+                      ),
                     })
                   : t('search.scheduleUnavailable')}
             </p>
